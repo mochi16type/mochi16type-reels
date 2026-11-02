@@ -58,6 +58,16 @@ def main():
         print("権限:", ", ".join(d.get("scopes", [])))
     else:
         print("有効期限: 確認できません（システムユーザーのトークンは、通常は期限なし）")
+    for path, fields in (("me/instagram_accounts", "id,username"),
+                         ("me/assigned_pages", "id,name,instagram_business_account{id,username}"),
+                         ("me/businesses", "id,name")):
+        r = get(path, fields=fields)
+        print(f"[{path}]", json.dumps(r.get("data", r.get("error")), ensure_ascii=False)[:600])
+    biz = get("me/businesses", fields="id").get("data", [])
+    for b in biz:
+        for edge in ("owned_instagram_accounts", "instagram_accounts", "owned_pages"):
+            r = get(f"{b['id']}/{edge}", fields="id,username,name")
+            print(f"[business/{edge}]", json.dumps(r.get("data", r.get("error")), ensure_ascii=False)[:600])
     acct = get(IG_USER_ID, fields="username,media_count")
     print("Instagramアカウント:", acct.get("username"), "/ 投稿数:", acct.get("media_count"), acct.get("error", ""))
     days = None
