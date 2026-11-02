@@ -50,11 +50,14 @@ def main():
             print("Facebookページ: なし")
     else:
         print("ページの取得:", pages.get("error"))
-    print("有効:", d.get("is_valid"))
-    print("種類:", d.get("type"))
-    print("有効期限:", when(d.get("expires_at")))
-    print("データアクセスの期限:", when(d.get("data_access_expires_at")))
-    print("権限:", ", ".join(d.get("scopes", [])))
+    if d:
+        print("有効:", d.get("is_valid"))
+        print("種類:", d.get("type"))
+        print("有効期限:", when(d.get("expires_at")))
+        print("データアクセスの期限:", when(d.get("data_access_expires_at")))
+        print("権限:", ", ".join(d.get("scopes", [])))
+    else:
+        print("有効期限: 確認できません（システムユーザーのトークンは、通常は期限なし）")
     acct = get(IG_USER_ID, fields="username,media_count")
     print("Instagramアカウント:", acct.get("username"), "/ 投稿数:", acct.get("media_count"), acct.get("error", ""))
     days = None
@@ -64,10 +67,12 @@ def main():
     out = os.environ.get("GITHUB_OUTPUT")
     if out:
         with open(out, "a") as f:
-            f.write(f"valid={str(bool(d.get('is_valid'))).lower()}\n")
+            f.write(f"valid={str(bool(d.get('is_valid') or 'id' in me)).lower()}\n")
             f.write(f"days_left={'' if days is None else int(days)}\n")
-    if not d.get("is_valid"):
+    if not (d.get("is_valid") or "id" in me):
         sys.exit("トークンが無効です。作り直しが必要です。")
+    if "error" in acct:
+        sys.exit("Instagramアカウントにアクセスできません。トークンにアカウントが割り当てられているか確認してください。")
 
 
 if __name__ == "__main__":
