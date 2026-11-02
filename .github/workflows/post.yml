@@ -1,0 +1,69 @@
+name: 毎日のリール投稿
+
+on:
+  schedule:
+    # 毎日 20:50（日本時間）に起動。GitHub側の混み具合で数分〜十数分遅れて、21時ごろに公開されます
+    - cron: "50 11 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "テスト（公開しない）"
+        type: boolean
+        default: true
+      target_date:
+        description: "日付を指定（YYYY-MM-DD、空なら今日）"
+        required: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: post-reel
+  cancel-in-progress: false
+
+env:
+  IG_USER_ID: "17841462171825014"
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 今日のリールを公開
+        id: post
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+          TARGET_DATE: ${{ inputs.target_date }}
+        run: python3 scripts/post_reel.py
+
+      - name: 公開した記録を保存
+        if: steps.post.outputs.posted == 'yes'
+        run: |
+          git config user.name "mochi16type-bot"
+          git config user.email "mochi16type-bot@users.noreply.github.com"
+          git add posted.json
+          git commit -m "公開記録 $(date -u +%F)"
+          git push
+
+      - name: 在庫が少ないときにお知らせ
+        if: success() && steps.post.outputs.remaining_days != '' && fromJSON(steps.post.outputs.remaining_days) < 7
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open=$(gh issue list --state open --search "in:title 動画の在庫" --json number --jq length)
+          if [ "$open" = "0" ]; then
+            gh issue create --title "動画の在庫が残り${{ steps.post.outputs.remaining_days }}日分です" \
+              --body "予定に入っている動画が少なくなりました。Claudeに「次の分の動画を作って」と伝えてください。"
+          fi
+
+      - name: 失敗したときにお知らせ
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --title "リールの自動投稿に失敗しました（$(TZ=Asia/Tokyo date +%F)）" \
+            --body "実行の記録: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          Claudeにこの画面を見せてください。"

@@ -1,0 +1,58 @@
+name: 動作チェック
+
+on:
+  push:
+    branches: [main]
+    paths: ["scripts/**", ".github/workflows/**", "queue.json"]
+  schedule:
+    # 毎週月曜 9:00（日本時間）にトークンの期限を確認
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  IG_USER_ID: "17841462171825014"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: トークンの状態
+        id: token
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: python3 scripts/check_token.py
+
+      - name: 次の動画で下準備だけテスト（公開しない）
+        if: github.event_name != 'schedule'
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          DRY_RUN: "1"
+        run: |
+          next=$(python3 -c "import json,datetime;t=(datetime.datetime.utcnow()+datetime.timedelta(hours=9)).date().isoformat();q=[e['date'] for e in json.load(open('queue.json')) if e['date']>=t];print(q[0] if q else '')")
+          if [ -n "$next" ]; then TARGET_DATE="$next" python3 scripts/post_reel.py; else echo "予定の動画がありません"; fi
+
+      - name: 期限が近いときにお知らせ
+        if: steps.token.outputs.days_left != '' && fromJSON(steps.token.outputs.days_left) < 14
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open=$(gh issue list --state open --search "in:title トークンの期限" --json number --jq length)
+          if [ "$open" = "0" ]; then
+            gh issue create --title "トークンの期限まで残り${{ steps.token.outputs.days_left }}日です" \
+              --body "Metaの開発者画面でトークンを作り直し、GitHubのSecrets（IG_ACCESS_TOKEN）を更新してください。手順はClaudeに聞いてください。"
+          fi
+
+      - name: 失敗したときにお知らせ
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --title "動作チェックで問題が見つかりました（$(TZ=Asia/Tokyo date +%F)）" \
+            --body "実行の記録: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          Claudeにこの画面を見せてください。"
