@@ -30,7 +30,26 @@ def when(ts):
 def main():
     if not TOKEN:
         sys.exit("IG_ACCESS_TOKEN がありません")
-    d = get("debug_token", input_token=TOKEN).get("data", {})
+    raw = get("debug_token", input_token=TOKEN)
+    if "error" in raw:
+        print("debug_token:", raw["error"])
+    d = raw.get("data", {})
+    me = get("me", fields="id,name")
+    print("トークンの持ち主:", me.get("name"), me.get("id"), me.get("error", ""))
+    perms = get("me/permissions")
+    if "data" in perms:
+        print("許可された権限:", ", ".join(p["permission"] for p in perms["data"] if p.get("status") == "granted"))
+    else:
+        print("権限の取得:", perms.get("error"))
+    pages = get("me/accounts", fields="name,instagram_business_account{id,username}")
+    if "data" in pages:
+        for pg in pages["data"]:
+            ig = pg.get("instagram_business_account") or {}
+            print("Facebookページ:", pg.get("name"), "→ Instagram:", ig.get("username"), ig.get("id"))
+        if not pages["data"]:
+            print("Facebookページ: なし")
+    else:
+        print("ページの取得:", pages.get("error"))
     print("有効:", d.get("is_valid"))
     print("種類:", d.get("type"))
     print("有効期限:", when(d.get("expires_at")))
