@@ -68,6 +68,15 @@ def main():
         for edge in ("owned_instagram_accounts", "instagram_accounts", "owned_pages"):
             r = get(f"{b['id']}/{edge}", fields="id,username,name")
             print(f"[business/{edge}]", json.dumps(r.get("data", r.get("error")), ensure_ascii=False)[:600])
+    for host in ("https://graph.instagram.com/v26.0", "https://graph.facebook.com/v26.0"):
+        for path, fields in (("me", "user_id,username,account_type"), (IG_USER_ID, "username,media_count")):
+            url = f"{host}/{path}?{urllib.parse.urlencode({'fields': fields, 'access_token': TOKEN})}"
+            try:
+                with urllib.request.urlopen(url, timeout=60) as r:
+                    res = r.read().decode()
+            except urllib.error.HTTPError as e:
+                res = e.read().decode(errors="replace")
+            print(f"[{host.split('//')[1].split('/')[0]} {path}]", res.replace(TOKEN, "***")[:300])
     acct = get(IG_USER_ID, fields="username,media_count")
     print("Instagramアカウント:", acct.get("username"), "/ 投稿数:", acct.get("media_count"), acct.get("error", ""))
     days = None
